@@ -1,5 +1,9 @@
 import os
+import sys
 import json
+
+from dotenv import load_dotenv
+load_dotenv()  # loads .env locally; on Railway env vars are already set so this is a no-op
 import logging
 from decimal import Decimal
 from datetime import date, datetime
@@ -8,6 +12,7 @@ from typing import Any
 
 from fastapi import FastAPI, HTTPException, Depends, Security
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 from fastapi.security.api_key import APIKeyHeader
 from pydantic import BaseModel, Field
 from openai import OpenAI
@@ -25,12 +30,26 @@ logging.basicConfig(
 logger = logging.getLogger("sql-agent")
 
 # ─────────────────────────────────────────────
-# Config (env-driven)
+# Config — all values MUST come from env vars.
+# Railway injects DATABASE_URL automatically when
+# you link a Postgres service to your deployment.
 # ─────────────────────────────────────────────
-DATABASE_URL       = os.getenv("DATABASE_URL",       "postgresql+psycopg2://postgres:2004@localhost:5432/company_db")
-OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY", "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")
-APP_API_KEY        = os.getenv("APP_API_KEY",        "change-me-in-production")   # simple bearer key
-LLM_MODEL          = os.getenv("LLM_MODEL",          "openai/gpt-4o-mini")
+def _require(name: str) -> str:
+    value = os.getenv(name)
+    if not value:
+        logger.error(f"❌ Required environment variable '{name}' is not set. Exiting.")
+        sys.exit(1)
+    return value
+
+# Railway injects DATABASE_URL as postgres:// — SQLAlchemy needs postgresql+psycopg2://
+_raw_db_url = _require("DATABASE_URL")
+DATABASE_URL = _raw_db_url.replace("postgres://", "postgresql+psycopg2://", 1) \
+                           .replace("postgresql://", "postgresql+psycopg2://", 1)
+
+OPENROUTER_API_KEY = _require("OPENROUTER_API_KEY")
+APP_API_KEY        = _require("APP_API_KEY")
+LLM_MODEL          = os.getenv("LLM_MODEL", "openai/gpt-4o-mini")
+PORT               = int(os.getenv("PORT", "8000"))
 
 # ─────────────────────────────────────────────
 # DB Engine (shared across requests)
@@ -41,6 +60,7 @@ engine = create_engine(
     pool_size=5,
     max_overflow=10,
     pool_pre_ping=True,
+    pool_recycle=300,   # recycle connections every 5 min — important on Railway
 )
 
 # ─────────────────────────────────────────────
@@ -296,14 +316,7 @@ def health():
         db_status = f"error: {exc}"
     return {"status": "ok", "db": db_status}
 
-# Add these imports at the top of main.py
-from fastapi.responses import FileResponse
-from fastapi.staticfiles import StaticFiles
 
-# Add this route (before the /query route is fine)
-@app.get("/", include_in_schema=False)
-def serve_ui():
-    return FileResponse("index.html")
 @app.post("/query", response_model=QueryResponse, tags=["Agent"])
 def run_query(
     body: QueryRequest,
@@ -340,8 +353,14 @@ def get_schema(_: str = Depends(require_api_key)):
         grouped.setdefault(row["table_name"], []).append(row["column_name"])
     return grouped
 
+
+@app.get("/", include_in_schema=False)
+def serve_ui():
+    """Serve the frontend UI."""
+    return FileResponse("index.html")
+
 # ─────────────────────────────────────────────
-# Dev entrypoint
+# Entrypoint — Railway uses $PORT
 # ─────────────────────────────────────────────
 if __name__ == "__main__":
-    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
+    uvicorn.run("main:app", host="0.0.0.0", port=PORT, reload=False)
