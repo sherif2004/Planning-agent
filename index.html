@@ -1,0 +1,833 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SQL Agent</title>
+  <link href="https://fonts.googleapis.com/css2?family=Syne+Mono&family=DM+Sans:wght@300;400;500;600&family=Bebas+Neue&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:       #080c10;
+      --surface:  #0d1117;
+      --border:   #1c2533;
+      --accent:   #00e5ff;
+      --accent2:  #7c3aed;
+      --text:     #c9d1d9;
+      --muted:    #4a5568;
+      --success:  #10b981;
+      --error:    #f87171;
+      --warn:     #fbbf24;
+    }
+
+    html, body {
+      height: 100%;
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'DM Sans', sans-serif;
+      font-size: 15px;
+      line-height: 1.6;
+      overflow-x: hidden;
+    }
+
+    /* ── Animated grid bg ── */
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background-image:
+        linear-gradient(var(--border) 1px, transparent 1px),
+        linear-gradient(90deg, var(--border) 1px, transparent 1px);
+      background-size: 48px 48px;
+      opacity: .35;
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    /* ── Top glow ── */
+    body::after {
+      content: '';
+      position: fixed;
+      top: -180px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 800px;
+      height: 400px;
+      background: radial-gradient(ellipse, rgba(0,229,255,.12) 0%, transparent 70%);
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    .layout {
+      position: relative;
+      z-index: 1;
+      min-height: 100vh;
+      display: grid;
+      grid-template-columns: 260px 1fr;
+      grid-template-rows: auto 1fr;
+    }
+
+    /* ── Header ── */
+    header {
+      grid-column: 1 / -1;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 14px 32px;
+      border-bottom: 1px solid var(--border);
+      background: rgba(8,12,16,.85);
+      backdrop-filter: blur(12px);
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+
+    .logo {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .logo-icon {
+      width: 36px; height: 36px;
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      border-radius: 8px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 18px;
+    }
+
+    .logo-text {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 24px;
+      letter-spacing: 2px;
+      color: #fff;
+    }
+
+    .logo-text span { color: var(--accent); }
+
+    .header-right {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .status-dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: var(--success);
+      box-shadow: 0 0 8px var(--success);
+      animation: pulse 2s infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50%       { opacity: .4; }
+    }
+
+    .status-label {
+      font-size: 12px;
+      color: var(--muted);
+      font-family: 'Syne Mono', monospace;
+    }
+
+    .api-url {
+      font-family: 'Syne Mono', monospace;
+      font-size: 11px;
+      color: var(--muted);
+      background: var(--border);
+      padding: 4px 10px;
+      border-radius: 4px;
+    }
+
+    /* ── Sidebar ── */
+    aside {
+      border-right: 1px solid var(--border);
+      padding: 24px 16px;
+      background: rgba(13,17,23,.6);
+      overflow-y: auto;
+    }
+
+    .sidebar-section {
+      margin-bottom: 28px;
+    }
+
+    .sidebar-label {
+      font-family: 'Syne Mono', monospace;
+      font-size: 10px;
+      letter-spacing: 2px;
+      color: var(--muted);
+      text-transform: uppercase;
+      margin-bottom: 10px;
+    }
+
+    .quick-btn {
+      width: 100%;
+      text-align: left;
+      background: transparent;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 9px 12px;
+      color: var(--text);
+      font-size: 12px;
+      font-family: 'DM Sans', sans-serif;
+      cursor: pointer;
+      margin-bottom: 6px;
+      transition: all .2s;
+      line-height: 1.4;
+    }
+
+    .quick-btn:hover {
+      background: rgba(0,229,255,.06);
+      border-color: rgba(0,229,255,.3);
+      color: var(--accent);
+    }
+
+    .history-item {
+      padding: 8px 10px;
+      border-radius: 6px;
+      font-size: 12px;
+      color: var(--muted);
+      cursor: pointer;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      transition: all .15s;
+    }
+
+    .history-item:hover {
+      background: var(--border);
+      color: var(--text);
+    }
+
+    /* ── Main ── */
+    main {
+      display: flex;
+      flex-direction: column;
+      padding: 32px;
+      gap: 24px;
+      overflow-y: auto;
+    }
+
+    /* ── Query card ── */
+    .query-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      overflow: hidden;
+    }
+
+    .card-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 14px 20px;
+      border-bottom: 1px solid var(--border);
+      font-family: 'Syne Mono', monospace;
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    .card-header .dot { width: 10px; height: 10px; border-radius: 50%; }
+    .dot-r { background: #ff5f57; }
+    .dot-y { background: #ffbd2e; }
+    .dot-g { background: #28c840; }
+
+    textarea {
+      width: 100%;
+      background: transparent;
+      border: none;
+      outline: none;
+      resize: none;
+      color: #fff;
+      font-size: 16px;
+      font-family: 'DM Sans', sans-serif;
+      padding: 20px 24px;
+      min-height: 90px;
+      line-height: 1.6;
+    }
+
+    textarea::placeholder { color: var(--muted); }
+
+    .query-footer {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 20px;
+      border-top: 1px solid var(--border);
+    }
+
+    .query-meta {
+      font-family: 'Syne Mono', monospace;
+      font-size: 11px;
+      color: var(--muted);
+    }
+
+    .run-btn {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: linear-gradient(135deg, var(--accent), #0099bb);
+      color: #000;
+      border: none;
+      border-radius: 8px;
+      padding: 10px 22px;
+      font-family: 'DM Sans', sans-serif;
+      font-weight: 600;
+      font-size: 14px;
+      cursor: pointer;
+      transition: all .2s;
+    }
+
+    .run-btn:hover { transform: translateY(-1px); box-shadow: 0 4px 20px rgba(0,229,255,.3); }
+    .run-btn:active { transform: translateY(0); }
+    .run-btn:disabled { opacity: .4; cursor: not-allowed; transform: none; }
+
+    .kbd {
+      background: rgba(0,0,0,.3);
+      border-radius: 4px;
+      padding: 1px 6px;
+      font-size: 11px;
+    }
+
+    /* ── API key row ── */
+    .apikey-row {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+    }
+
+    .apikey-row label {
+      font-family: 'Syne Mono', monospace;
+      font-size: 11px;
+      color: var(--muted);
+      white-space: nowrap;
+    }
+
+    .apikey-row input {
+      flex: 1;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 7px 12px;
+      color: var(--text);
+      font-family: 'Syne Mono', monospace;
+      font-size: 12px;
+      outline: none;
+      transition: border-color .2s;
+    }
+
+    .apikey-row input:focus { border-color: var(--accent); }
+
+    .base-url-row {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+    }
+
+    .base-url-row label {
+      font-family: 'Syne Mono', monospace;
+      font-size: 11px;
+      color: var(--muted);
+      white-space: nowrap;
+    }
+
+    .base-url-row input {
+      flex: 1;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 7px 12px;
+      color: var(--text);
+      font-family: 'Syne Mono', monospace;
+      font-size: 12px;
+      outline: none;
+      transition: border-color .2s;
+    }
+
+    .base-url-row input:focus { border-color: var(--accent); }
+
+    /* ── Result section ── */
+    .result-section {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      animation: fadeUp .4s ease both;
+    }
+
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(16px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    .result-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      overflow: hidden;
+    }
+
+    .result-card-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 20px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .result-title {
+      font-family: 'Syne Mono', monospace;
+      font-size: 11px;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      color: var(--accent);
+    }
+
+    .badge {
+      font-family: 'Syne Mono', monospace;
+      font-size: 10px;
+      padding: 2px 8px;
+      border-radius: 20px;
+      letter-spacing: 1px;
+    }
+
+    .badge-success { background: rgba(16,185,129,.15); color: var(--success); border: 1px solid rgba(16,185,129,.3); }
+    .badge-error   { background: rgba(248,113,113,.15); color: var(--error);   border: 1px solid rgba(248,113,113,.3); }
+    .badge-info    { background: rgba(0,229,255,.1);    color: var(--accent);  border: 1px solid rgba(0,229,255,.2); }
+
+    /* ── Answer ── */
+    .answer-body {
+      padding: 20px 24px;
+      font-size: 15px;
+      line-height: 1.75;
+      color: #e2e8f0;
+    }
+
+    /* ── SQL block ── */
+    .sql-block {
+      padding: 16px 24px;
+      font-family: 'Syne Mono', monospace;
+      font-size: 13px;
+      line-height: 1.8;
+      color: #a5d6ff;
+      overflow-x: auto;
+      white-space: pre;
+    }
+
+    /* ── Table ── */
+    .table-wrap { overflow-x: auto; }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+
+    thead tr {
+      background: rgba(0,229,255,.05);
+    }
+
+    th {
+      font-family: 'Syne Mono', monospace;
+      font-size: 11px;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      color: var(--accent);
+      padding: 10px 20px;
+      text-align: left;
+      border-bottom: 1px solid var(--border);
+    }
+
+    td {
+      padding: 10px 20px;
+      border-bottom: 1px solid rgba(28,37,51,.6);
+      color: var(--text);
+    }
+
+    tbody tr:hover { background: rgba(255,255,255,.02); }
+
+    /* ── Plan tree ── */
+    .plan-body {
+      padding: 16px 24px;
+      font-family: 'Syne Mono', monospace;
+      font-size: 12px;
+      line-height: 1.9;
+    }
+
+    .plan-row { display: flex; gap: 12px; }
+    .plan-key { color: var(--muted); min-width: 130px; }
+    .plan-val { color: #e2e8f0; }
+
+    /* ── Loader ── */
+    .loader-wrap {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 16px;
+      padding: 48px;
+    }
+
+    .loader {
+      width: 40px; height: 40px;
+      border: 2px solid var(--border);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin .7s linear infinite;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .loader-text {
+      font-family: 'Syne Mono', monospace;
+      font-size: 13px;
+      color: var(--muted);
+    }
+
+    .loader-step {
+      color: var(--accent);
+      animation: blink 1s step-start infinite;
+    }
+
+    @keyframes blink { 50% { opacity: 0; } }
+
+    /* ── Tabs ── */
+    .tabs { display: flex; gap: 4px; padding: 8px 16px; border-bottom: 1px solid var(--border); }
+
+    .tab {
+      background: transparent;
+      border: 1px solid transparent;
+      border-radius: 6px;
+      padding: 5px 14px;
+      font-family: 'Syne Mono', monospace;
+      font-size: 11px;
+      letter-spacing: 1px;
+      color: var(--muted);
+      cursor: pointer;
+      transition: all .15s;
+    }
+
+    .tab.active {
+      background: rgba(0,229,255,.08);
+      border-color: rgba(0,229,255,.25);
+      color: var(--accent);
+    }
+
+    .tab:hover:not(.active) { color: var(--text); }
+
+    .tab-pane { display: none; }
+    .tab-pane.active { display: block; }
+
+    /* ── Error card ── */
+    .error-body {
+      padding: 20px 24px;
+      font-family: 'Syne Mono', monospace;
+      font-size: 13px;
+      color: var(--error);
+      line-height: 1.7;
+    }
+
+    /* ── Scrollbar ── */
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: var(--muted); }
+
+    /* ── Empty state ── */
+    .empty-state {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      padding: 64px 32px;
+      color: var(--muted);
+      text-align: center;
+    }
+
+    .empty-icon { font-size: 48px; opacity: .3; }
+    .empty-title { font-size: 18px; color: var(--text); font-weight: 500; }
+    .empty-sub { font-size: 13px; max-width: 300px; }
+
+    /* ── Config panel ── */
+    .config-panel {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 16px 20px;
+      display: flex;
+      gap: 16px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+
+    /* ── Timing ── */
+    .timing {
+      font-family: 'Syne Mono', monospace;
+      font-size: 10px;
+      color: var(--muted);
+      padding: 0 20px 12px;
+    }
+  </style>
+</head>
+<body>
+<div class="layout">
+
+  <!-- Header -->
+  <header>
+    <div class="logo">
+      <div class="logo-icon">⚡</div>
+      <div class="logo-text">SQL <span>AGENT</span></div>
+    </div>
+    <div class="header-right">
+      <div class="status-dot" id="statusDot"></div>
+      <span class="status-label" id="statusLabel">CONNECTING…</span>
+    </div>
+  </header>
+
+  <!-- Sidebar -->
+  <aside>
+    <div class="sidebar-section">
+      <div class="sidebar-label">Quick Queries</div>
+      <button class="quick-btn" onclick="setQuestion(this)">Which department has the highest total salary expense?</button>
+      <button class="quick-btn" onclick="setQuestion(this)">Show me the top 5 highest paid employees</button>
+      <button class="quick-btn" onclick="setQuestion(this)">How many employees are in each department?</button>
+      <button class="quick-btn" onclick="setQuestion(this)">What is the average salary per department?</button>
+      <button class="quick-btn" onclick="setQuestion(this)">List all departments ordered by employee count</button>
+    </div>
+
+    <div class="sidebar-section">
+      <div class="sidebar-label">History</div>
+      <div id="historyList"><div style="font-size:12px;color:var(--muted);padding:6px 10px">No history yet</div></div>
+    </div>
+  </aside>
+
+  <!-- Main -->
+  <main>
+    <!-- Config -->
+    <div class="config-panel">
+      <div class="base-url-row">
+        <label>BASE URL</label>
+        <input id="baseUrl" type="text" value="http://127.0.0.1:8000" placeholder="http://127.0.0.1:8000" />
+      </div>
+      <div class="apikey-row">
+        <label>X-API-KEY</label>
+        <input id="apiKey" type="password" value="change-me-in-production" placeholder="your-api-key" />
+      </div>
+    </div>
+
+    <!-- Query card -->
+    <div class="query-card">
+      <div class="card-header">
+        <span class="dot dot-r"></span>
+        <span class="dot dot-y"></span>
+        <span class="dot dot-g"></span>
+        <span style="margin-left:8px">natural_language_query.sql</span>
+      </div>
+      <textarea id="questionInput" rows="3" placeholder="Ask anything about your database… e.g. Which department has the highest average salary?"
+        onkeydown="handleKey(event)"></textarea>
+      <div class="query-footer">
+        <span class="query-meta">Press <span class="kbd">Ctrl+Enter</span> to run</span>
+        <button class="run-btn" id="runBtn" onclick="runQuery()">
+          <span>▶</span> Run Query
+        </button>
+      </div>
+    </div>
+
+    <!-- Result area -->
+    <div id="resultArea">
+      <div class="empty-state">
+        <div class="empty-icon">🗄️</div>
+        <div class="empty-title">Ask your database anything</div>
+        <div class="empty-sub">Type a question above and hit Run Query to get started</div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<script>
+  const history = [];
+
+  // ── Health check on load ──
+  window.addEventListener('DOMContentLoaded', checkHealth);
+
+  async function checkHealth() {
+    const base = document.getElementById('baseUrl').value.trim();
+    const dot  = document.getElementById('statusDot');
+    const lbl  = document.getElementById('statusLabel');
+    try {
+      const r = await fetch(`${base}/health`, { signal: AbortSignal.timeout(3000) });
+      if (r.ok) {
+        const d = await r.json();
+        dot.style.background = d.db === 'ok' ? 'var(--success)' : 'var(--warn)';
+        dot.style.boxShadow  = d.db === 'ok' ? '0 0 8px var(--success)' : '0 0 8px var(--warn)';
+        lbl.textContent = d.db === 'ok' ? 'CONNECTED' : 'DB ERROR';
+      } else {
+        throw new Error();
+      }
+    } catch {
+      dot.style.background = 'var(--error)';
+      dot.style.boxShadow  = '0 0 8px var(--error)';
+      lbl.textContent = 'OFFLINE';
+    }
+  }
+
+  function setQuestion(btn) {
+    document.getElementById('questionInput').value = btn.textContent.trim();
+    document.getElementById('questionInput').focus();
+  }
+
+  function handleKey(e) {
+    if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') runQuery();
+  }
+
+  async function runQuery() {
+    const question = document.getElementById('questionInput').value.trim();
+    if (!question) return;
+
+    const base   = document.getElementById('baseUrl').value.trim();
+    const apiKey = document.getElementById('apiKey').value.trim();
+    const btn    = document.getElementById('runBtn');
+    const area   = document.getElementById('resultArea');
+
+    btn.disabled = true;
+    const t0 = Date.now();
+
+    // Loading
+    area.innerHTML = `
+      <div class="result-card">
+        <div class="loader-wrap">
+          <div class="loader"></div>
+          <div class="loader-text">Thinking<span class="loader-step">…</span></div>
+        </div>
+      </div>`;
+
+    try {
+      const res = await fetch(`${base}/query`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-API-Key': apiKey,
+        },
+        body: JSON.stringify({ question }),
+      });
+
+      const elapsed = ((Date.now() - t0) / 1000).toFixed(2);
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ detail: res.statusText }));
+        throw new Error(err.detail || res.statusText);
+      }
+
+      const data = await res.json();
+      renderResult(data, elapsed);
+      addHistory(question);
+
+    } catch (err) {
+      area.innerHTML = `
+        <div class="result-card">
+          <div class="result-card-header">
+            <span class="result-title">ERROR</span>
+            <span class="badge badge-error">FAILED</span>
+          </div>
+          <div class="error-body">${escHtml(err.message)}</div>
+        </div>`;
+    }
+
+    btn.disabled = false;
+  }
+
+  function renderResult(data, elapsed) {
+    const area = document.getElementById('resultArea');
+
+    // Build rows table
+    let tableHtml = '<div class="table-wrap"><table><thead><tr>';
+    const cols = data.rows.length ? Object.keys(data.rows[0]) : [];
+    cols.forEach(c => { tableHtml += `<th>${escHtml(c)}</th>`; });
+    tableHtml += '</tr></thead><tbody>';
+    if (data.rows.length === 0) {
+      tableHtml += `<tr><td colspan="${Math.max(cols.length,1)}" style="color:var(--muted);text-align:center;padding:24px">No rows returned</td></tr>`;
+    } else {
+      data.rows.forEach(row => {
+        tableHtml += '<tr>';
+        cols.forEach(c => { tableHtml += `<td>${escHtml(String(row[c] ?? ''))}</td>`; });
+        tableHtml += '</tr>';
+      });
+    }
+    tableHtml += '</tbody></table></div>';
+
+    // Plan lines
+    const plan = data.plan;
+    const planLines = [
+      ['table',      plan.table],
+      ['select',     (plan.select_columns || []).join(', ') || '—'],
+      ['aggregations', (plan.aggregations || []).map(a => `${a.function}(${a.column}) AS ${a.alias}`).join(', ') || '—'],
+      ['filters',    (plan.filters || []).map(f => `${f.column} ${f.operator} ${f.value}`).join(', ') || '—'],
+      ['group by',   (plan.group_by || []).join(', ') || '—'],
+      ['order by',   plan.order_by?.value ? `${plan.order_by.value} ${plan.order_direction}` : '—'],
+      ['limit',      plan.limit ?? '—'],
+    ];
+
+    let planHtml = '<div class="plan-body">';
+    planLines.forEach(([k, v]) => {
+      planHtml += `<div class="plan-row"><span class="plan-key">${k}</span><span class="plan-val">${escHtml(String(v))}</span></div>`;
+    });
+    planHtml += `<div class="plan-row" style="margin-top:10px"><span class="plan-key">explanation</span><span class="plan-val" style="color:var(--muted)">${escHtml(plan.explanation || '')}</span></div>`;
+    planHtml += '</div>';
+
+    area.innerHTML = `
+      <div class="result-section">
+
+        <!-- Answer -->
+        <div class="result-card">
+          <div class="result-card-header">
+            <span class="result-title">ANSWER</span>
+            <span class="badge badge-success">OK</span>
+          </div>
+          <div class="answer-body">${escHtml(data.answer)}</div>
+          <div class="timing">⏱ ${elapsed}s · ${data.rows.length} row${data.rows.length !== 1 ? 's' : ''}</div>
+        </div>
+
+        <!-- Tabs: SQL / Data / Plan -->
+        <div class="result-card">
+          <div class="tabs">
+            <button class="tab active" onclick="switchTab(event,'tabData')">📊 DATA (${data.rows.length})</button>
+            <button class="tab"        onclick="switchTab(event,'tabSql')">📜 SQL</button>
+            <button class="tab"        onclick="switchTab(event,'tabPlan')">🗺 PLAN</button>
+          </div>
+
+          <div id="tabData" class="tab-pane active">${tableHtml}</div>
+          <div id="tabSql"  class="tab-pane">
+            <div class="result-card-header">
+              <span class="result-title">GENERATED SQL</span>
+              <span class="badge badge-info">SELECT</span>
+            </div>
+            <div class="sql-block">${escHtml(data.sql)}</div>
+          </div>
+          <div id="tabPlan" class="tab-pane">${planHtml}</div>
+        </div>
+
+      </div>`;
+  }
+
+  function switchTab(e, id) {
+    const card = e.target.closest('.result-card');
+    card.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    card.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
+    e.target.classList.add('active');
+    card.querySelector('#' + id).classList.add('active');
+  }
+
+  function addHistory(q) {
+    history.unshift(q);
+    const list = document.getElementById('historyList');
+    list.innerHTML = history.slice(0, 10).map(h =>
+      `<div class="history-item" onclick="document.getElementById('questionInput').value='${h.replace(/'/g,"\\'")}'">${escHtml(h)}</div>`
+    ).join('');
+  }
+
+  function escHtml(str) {
+    return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+</script>
+</body>
+</html>
