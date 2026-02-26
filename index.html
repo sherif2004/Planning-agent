@@ -607,7 +607,7 @@
     <div class="config-panel">
       <div class="base-url-row">
         <label>BASE URL</label>
-        <input id="baseUrl" type="text" value="http://127.0.0.1:8000" placeholder="http://127.0.0.1:8000" />
+        <input id="baseUrl" type="text" placeholder="auto-detected" />
       </div>
       <div class="apikey-row">
         <label>X-API-KEY</label>
@@ -646,6 +646,10 @@
 
 <script>
   const history = [];
+
+  // ── Auto-detect base URL from current host ──
+  const baseUrlInput = document.getElementById('baseUrl');
+  baseUrlInput.value = window.location.origin;
 
   // ── Health check on load ──
   window.addEventListener('DOMContentLoaded', checkHealth);
